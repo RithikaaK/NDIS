@@ -1,0 +1,495 @@
+"""Pydantic v2 validation and serialization schemas for Tenant Module."""
+import re
+from datetime import date, datetime
+from decimal import Decimal
+from typing import Any, List, Optional
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+
+
+# ============================================================================
+# Generic & Utility Schemas
+# ============================================================================
+
+class MessageResponse(BaseModel):
+    """Generic message response schema."""
+    message: str
+    success: bool = True
+
+
+# ============================================================================
+# Subscription Plan Schemas
+# ============================================================================
+
+class SubscriptionPlanResponse(BaseModel):
+    """Response schema for subscription plan."""
+    model_config = ConfigDict(from_attributes=True)
+
+    plan_id: int
+    plan_code: str
+    plan_name: str
+    max_branches: int
+    max_users: int
+    max_participants: int
+    monthly_price: Decimal
+    monthly_fee_aud: Optional[Decimal] = None
+    annual_fee_aud: Optional[Decimal] = None
+    is_active: bool
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+# ============================================================================
+# Tenant Signup & Registration Schemas
+# ============================================================================
+
+class TenantSignupBase(BaseModel):
+    """Base fields required for tenant registration."""
+    organisation_name: str = Field(..., min_length=2, max_length=255)
+    trading_name: Optional[str] = Field(None, max_length=255)
+    abn: str = Field(..., description="Australian Business Number (11 digits)")
+    acn: Optional[str] = Field(None, max_length=9)
+    organisation_type: Optional[str] = Field(None, max_length=50)
+    primary_email: EmailStr
+    primary_phone: Optional[str] = Field(None, max_length=20)
+    website_url: Optional[str] = Field(None, max_length=500)
+    timezone: str = Field("Australia/Sydney", max_length=100)
+    plan_id: Optional[int] = Field(None, description="Optional subscription plan ID")
+
+    # Initial Administrator Account
+    admin_first_name: str = Field(..., min_length=1, max_length=100)
+    admin_last_name: str = Field(..., min_length=1, max_length=100)
+    admin_email: EmailStr
+    admin_password: str = Field(..., min_length=8, max_length=100)
+    admin_mobile: Optional[str] = Field(None, max_length=20)
+    admin_job_title: Optional[str] = Field("Chief Executive Officer", max_length=150)
+
+    # Initial Head Office Address Details
+    head_office_address_line1: Optional[str] = Field(None, max_length=255)
+    head_office_suburb: Optional[str] = Field(None, max_length=100)
+    head_office_state_code: Optional[str] = Field("NSW", max_length=10)
+    head_office_postcode: Optional[str] = Field(None, max_length=10)
+
+    @field_validator("abn", mode="before")
+    @classmethod
+    def validate_abn(cls, v: Any) -> str:
+        """Strip non-digits and enforce strict 11-digit ABN format."""
+        if not v:
+            raise ValueError("ABN is required")
+        digits = re.sub(r"\D", "", str(v))
+        if len(digits) != 11:
+            raise ValueError("ABN must contain exactly 11 digits")
+        return digits
+
+    @field_validator("acn", mode="before")
+    @classmethod
+    def validate_acn(cls, v: Any) -> Optional[str]:
+        """Strip non-digits and validate optional 9-digit ACN format."""
+        if not v:
+            return None
+        digits = re.sub(r"\D", "", str(v))
+        if len(digits) != 9:
+            raise ValueError("ACN must contain exactly 9 digits")
+        return digits
+
+
+class TenantSignupRegistered(TenantSignupBase):
+    """Signup payload for Registered NDIS Providers."""
+    ndis_registration_number: str = Field(
+        ..., min_length=3, max_length=20, description="NDIS Quality and Safeguards registration number"
+    )
+    registration_expiry_date: Optional[date] = None
+    provider_type: str = "Registered"
+
+
+class TenantSignupNonRegistered(TenantSignupBase):
+    """Signup payload for Non-Registered NDIS Providers."""
+    provider_type: str = "Non-Registered"
+
+
+# ============================================================================
+# Tenant Entity Schemas
+# ============================================================================
+
+class TenantUpdate(BaseModel):
+    """Payload to update an existing tenant's profile."""
+    organisation_name: Optional[str] = Field(None, min_length=2, max_length=255)
+    trading_name: Optional[str] = Field(None, max_length=255)
+    acn: Optional[str] = Field(None, max_length=9)
+    ndis_registration_number: Optional[str] = Field(None, max_length=20)
+    registration_expiry_date: Optional[date] = None
+    organisation_type: Optional[str] = Field(None, max_length=50)
+    primary_email: Optional[EmailStr] = None
+    primary_phone: Optional[str] = Field(None, max_length=20)
+    website_url: Optional[str] = Field(None, max_length=500)
+    logo_url: Optional[str] = Field(None, max_length=500)
+    timezone: Optional[str] = Field(None, max_length=100)
+    status: Optional[str] = Field(None, max_length=20)
+
+
+class TenantResponse(BaseModel):
+    """Response schema for tenant organisation details."""
+    model_config = ConfigDict(from_attributes=True)
+
+    tenant_id: int
+    tenant_code: Optional[str] = None
+    organisation_name: str
+    trading_name: Optional[str] = None
+    abn: Optional[str] = None
+    acn: Optional[str] = None
+    is_registered_provider: bool
+    ndis_registration_number: Optional[str] = None
+    registration_expiry_date: Optional[date] = None
+    provider_type: Optional[str] = None
+    organisation_type: Optional[str] = None
+    primary_email: str
+    primary_phone: Optional[str] = None
+    website_url: Optional[str] = None
+    logo_url: Optional[str] = None
+    timezone: str
+    status: str
+    is_deleted: bool
+    deleted_at: Optional[datetime] = None
+    created_by: Optional[int] = None
+    created_at: datetime
+    updated_by: Optional[int] = None
+    updated_at: Optional[datetime] = None
+
+
+class TenantListResponse(BaseModel):
+    """Paginated list of tenant records."""
+    total: int
+    skip: int
+    limit: int
+    items: List[TenantResponse]
+
+
+# ============================================================================
+# Tenant Contact Schemas
+# ============================================================================
+
+class TenantContactCreate(BaseModel):
+    """Payload to create a contact person for a tenant."""
+    contact_type: str = Field(..., max_length=50, description="Primary, Billing, Support, etc.")
+    first_name: str = Field(..., max_length=100)
+    last_name: str = Field(..., max_length=100)
+    position_title: Optional[str] = Field(None, max_length=150)
+    email: EmailStr
+    phone: Optional[str] = Field(None, max_length=20)
+    mobile: Optional[str] = Field(None, max_length=20)
+    is_active: bool = True
+
+
+class TenantContactUpdate(BaseModel):
+    """Payload to update an existing contact person."""
+    contact_type: Optional[str] = Field(None, max_length=50)
+    first_name: Optional[str] = Field(None, max_length=100)
+    last_name: Optional[str] = Field(None, max_length=100)
+    position_title: Optional[str] = Field(None, max_length=150)
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = Field(None, max_length=20)
+    mobile: Optional[str] = Field(None, max_length=20)
+    is_active: Optional[bool] = None
+
+
+class TenantContactResponse(BaseModel):
+    """Response schema for tenant contact person."""
+    model_config = ConfigDict(from_attributes=True)
+
+    contact_id: int
+    tenant_id: int
+    contact_type: str
+    first_name: str
+    last_name: str
+    position_title: Optional[str] = None
+    email: str
+    phone: Optional[str] = None
+    mobile: Optional[str] = None
+    is_active: bool
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+# ============================================================================
+# Tenant Address Schemas
+# ============================================================================
+
+class TenantAddressCreate(BaseModel):
+    """Payload to add a physical, mailing, or registered address."""
+    address_type: str = Field(..., max_length=50, description="Registered, Mailing, Physical, etc.")
+    address_line1: str = Field(..., max_length=255)
+    address_line2: Optional[str] = Field(None, max_length=255)
+    suburb: str = Field(..., max_length=100)
+    state_code: str = Field(..., max_length=10)
+    postcode: str = Field(..., max_length=10)
+    country_code: str = Field("AUS", max_length=3)
+    is_primary: bool = False
+
+
+class TenantAddressResponse(BaseModel):
+    """Response schema for tenant address."""
+    model_config = ConfigDict(from_attributes=True)
+
+    address_id: int
+    tenant_id: int
+    address_type: str
+    address_line1: str
+    address_line2: Optional[str] = None
+    suburb: str
+    state_code: str
+    postcode: str
+    country_code: str
+    is_primary: bool
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+# ============================================================================
+# Branch Schemas
+# ============================================================================
+
+class BranchCreate(BaseModel):
+    """Payload to create an operational branch or service hub."""
+    branch_code: str = Field(..., min_length=2, max_length=50)
+    branch_name: str = Field(..., min_length=2, max_length=255)
+    phone: Optional[str] = Field(None, max_length=20)
+    email: Optional[EmailStr] = None
+    address_line1: Optional[str] = Field(None, max_length=255)
+    suburb: Optional[str] = Field(None, max_length=100)
+    state_code: Optional[str] = Field(None, max_length=10)
+    postcode: Optional[str] = Field(None, max_length=10)
+    is_head_office: bool = False
+    is_active: bool = True
+
+
+class BranchUpdate(BaseModel):
+    """Payload to update an operational branch."""
+    branch_name: Optional[str] = Field(None, max_length=255)
+    phone: Optional[str] = Field(None, max_length=20)
+    email: Optional[EmailStr] = None
+    address_line1: Optional[str] = Field(None, max_length=255)
+    suburb: Optional[str] = Field(None, max_length=100)
+    state_code: Optional[str] = Field(None, max_length=10)
+    postcode: Optional[str] = Field(None, max_length=10)
+    is_active: Optional[bool] = None
+
+
+class BranchResponse(BaseModel):
+    """Response schema for branch details."""
+    model_config = ConfigDict(from_attributes=True)
+
+    branch_id: int
+    tenant_id: int
+    branch_code: str
+    branch_name: str
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    address_line1: Optional[str] = None
+    suburb: Optional[str] = None
+    state_code: Optional[str] = None
+    postcode: Optional[str] = None
+    is_head_office: bool
+    is_active: bool
+    is_deleted: bool
+    deleted_at: Optional[datetime] = None
+    created_by: Optional[int] = None
+    created_at: datetime
+    updated_by: Optional[int] = None
+    updated_at: Optional[datetime] = None
+
+
+# ============================================================================
+# Program Schemas
+# ============================================================================
+
+class ProgramCreate(BaseModel):
+    """Payload to create a service program (In-Home Support, SIL, etc.)."""
+    program_code: str = Field(..., min_length=2, max_length=50)
+    program_name: str = Field(..., min_length=2, max_length=255)
+    description: Optional[str] = None
+    funding_type: Optional[str] = Field("NDIS", max_length=50, description="NDIS, HCP, CHSP, DVA")
+    is_active: bool = True
+    branch_ids: Optional[List[int]] = Field(default_factory=list, description="Optional branches offering program")
+
+
+class ProgramUpdate(BaseModel):
+    """Payload to update an existing program."""
+    program_name: Optional[str] = Field(None, max_length=255)
+    description: Optional[str] = None
+    funding_type: Optional[str] = Field(None, max_length=50)
+    is_active: Optional[bool] = None
+
+
+class ProgramResponse(BaseModel):
+    """Response schema for service program."""
+    model_config = ConfigDict(from_attributes=True)
+
+    program_id: int
+    tenant_id: int
+    program_code: str
+    program_name: str
+    description: Optional[str] = None
+    funding_type: Optional[str] = None
+    is_active: bool
+    is_deleted: bool
+    deleted_at: Optional[datetime] = None
+    created_by: Optional[int] = None
+    created_at: datetime
+    updated_by: Optional[int] = None
+    updated_at: Optional[datetime] = None
+
+
+# ============================================================================
+# Role & Permission Schemas
+# ============================================================================
+
+class RoleCreate(BaseModel):
+    """Payload to create a custom RBAC role for the tenant."""
+    role_code: str = Field(..., min_length=2, max_length=50)
+    role_name: str = Field(..., min_length=2, max_length=150)
+    description: Optional[str] = None
+    is_active: bool = True
+
+
+class RoleUpdate(BaseModel):
+    """Payload to update an existing role."""
+    role_name: Optional[str] = Field(None, max_length=150)
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class RoleResponse(BaseModel):
+    """Response schema for RBAC role."""
+    model_config = ConfigDict(from_attributes=True)
+
+    role_id: int
+    tenant_id: Optional[int] = None
+    role_code: str
+    role_name: str
+    description: Optional[str] = None
+    is_system_role: bool
+    is_active: bool
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+class PermissionResponse(BaseModel):
+    """Response schema for system permissions."""
+    model_config = ConfigDict(from_attributes=True)
+
+    permission_id: int
+    module: str
+    action: str
+    feature: Optional[str] = None
+    permission_code: str
+    description: Optional[str] = None
+    created_at: datetime
+
+
+# ============================================================================
+# App User Schemas
+# ============================================================================
+
+class AppUserCreate(BaseModel):
+    """Payload to invite or create an application user account."""
+    branch_id: int
+    email: EmailStr
+    password: str = Field(..., min_length=8, max_length=100)
+    first_name: str = Field(..., max_length=100)
+    last_name: str = Field(..., max_length=100)
+    mobile: Optional[str] = Field(None, max_length=20)
+    job_title: Optional[str] = Field(None, max_length=150)
+    is_tenant_admin: bool = False
+    is_active: bool = True
+    role_ids: Optional[List[int]] = Field(default_factory=list)
+
+
+class AppUserUpdate(BaseModel):
+    """Payload to update user details."""
+    branch_id: Optional[int] = None
+    first_name: Optional[str] = Field(None, max_length=100)
+    last_name: Optional[str] = Field(None, max_length=100)
+    mobile: Optional[str] = Field(None, max_length=20)
+    job_title: Optional[str] = Field(None, max_length=150)
+    is_active: Optional[bool] = None
+    password: Optional[str] = Field(None, min_length=8, max_length=100)
+
+
+class AppUserResponse(BaseModel):
+    """Response schema for application user account."""
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: str
+    tenant_id: int
+    branch_id: int
+    email: str
+    first_name: str
+    last_name: str
+    mobile: Optional[str] = None
+    job_title: Optional[str] = None
+    is_tenant_admin: bool
+    is_active: bool
+    is_deleted: bool
+    deleted_at: Optional[datetime] = None
+    last_login_at: Optional[datetime] = None
+    password_changed_at: Optional[datetime] = None
+    created_by: Optional[str] = None
+    created_at: datetime
+    updated_by: Optional[str] = None
+    updated_at: Optional[datetime] = None
+
+
+# ============================================================================
+# Tenant Configuration Schemas
+# ============================================================================
+
+class TenantConfigUpdate(BaseModel):
+    """Payload to modify tenant system configuration."""
+    date_format: Optional[str] = Field(None, max_length=20)
+    currency_code: Optional[str] = Field(None, max_length=3)
+    enable_gst: Optional[bool] = None
+    enable_schads_award: Optional[bool] = None
+    enable_pace_integration: Optional[bool] = None
+    enable_proda_integration: Optional[bool] = None
+    default_funding_type: Optional[str] = Field(None, max_length=50)
+    invoice_prefix: Optional[str] = Field(None, max_length=20)
+    invoice_due_days: Optional[int] = None
+
+
+class TenantConfigResponse(BaseModel):
+    """Response schema for tenant system configuration."""
+    model_config = ConfigDict(from_attributes=True)
+
+    config_id: int
+    tenant_id: int
+    date_format: str
+    currency_code: str
+    enable_gst: bool
+    enable_schads_award: bool
+    enable_pace_integration: bool
+    enable_proda_integration: bool
+    default_funding_type: str
+    invoice_prefix: str
+    invoice_due_days: int
+    updated_by: Optional[int] = None
+    updated_at: Optional[datetime] = None
+
+
+# ============================================================================
+# Authentication Schemas
+# ============================================================================
+
+class LoginRequest(BaseModel):
+    """Payload to authenticate user within a specific tenant context."""
+    email: EmailStr
+    password: str
+    tenant_code: str = Field(..., description="Unique tenant slug code (e.g. CARE-001)")
+
+
+class TokenResponse(BaseModel):
+    """JWT Bearer authentication token response."""
+    access_token: str
+    token_type: str = "bearer"
+    user_id: str
+    tenant_id: int
+    full_name: str
+    is_tenant_admin: bool

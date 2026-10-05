@@ -1,0 +1,609 @@
+"""SQLAlchemy 2.0 ORM Models for NDIS Management System - Tenant Module.
+All tables are mapped to the [tenant] schema in MSSQL.
+"""
+from datetime import date, datetime
+from typing import Optional
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.database import Base
+
+
+class SubscriptionPlan(Base):
+    """SaaS Subscription Plan available to tenants."""
+    __tablename__ = "subscription_plan"
+    __table_args__ = {"schema": "tenant"}
+
+    plan_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    plan_code: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
+    plan_name: Mapped[str] = mapped_column(String(150), nullable=False)
+    max_branches: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    max_users: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
+    max_participants: Mapped[int] = mapped_column(Integer, default=50, nullable=False)
+    monthly_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    monthly_fee_aud: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
+    annual_fee_aud: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.sysdatetimeoffset(), nullable=False
+    )
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), onupdate=func.sysdatetimeoffset(), nullable=True
+    )
+
+    # Relationships
+    subscriptions: Mapped[list["TenantSubscription"]] = relationship(
+        "TenantSubscription", back_populates="plan"
+    )
+
+
+class Tenant(Base):
+    """Core Tenant organisation model representing an NDIS provider."""
+    __tablename__ = "tenant"
+    __table_args__ = {"schema": "tenant"}
+
+    tenant_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_code: Mapped[Optional[str]] = mapped_column(String(50), unique=True, nullable=True)
+    organisation_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    trading_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    abn: Mapped[Optional[str]] = mapped_column(String(11), unique=True, nullable=True)
+    acn: Mapped[Optional[str]] = mapped_column(String(9), nullable=True)
+    is_registered_provider: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    ndis_registration_number: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    registration_expiry_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    provider_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    organisation_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    primary_email: Mapped[str] = mapped_column(String(255), nullable=False)
+    primary_phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    website_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    logo_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    timezone: Mapped[str] = mapped_column(String(100), default="Australia/Sydney", nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="Active", nullable=False)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.sysdatetimeoffset(), nullable=False
+    )
+    updated_by: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), onupdate=func.sysdatetimeoffset(), nullable=True
+    )
+
+    # Relationships
+    subscriptions: Mapped[list["TenantSubscription"]] = relationship(
+        "TenantSubscription", back_populates="tenant", cascade="all, delete-orphan"
+    )
+    contacts: Mapped[list["TenantContact"]] = relationship(
+        "TenantContact", back_populates="tenant", cascade="all, delete-orphan"
+    )
+    addresses: Mapped[list["TenantAddress"]] = relationship(
+        "TenantAddress", back_populates="tenant", cascade="all, delete-orphan"
+    )
+    service_states: Mapped[list["TenantServiceState"]] = relationship(
+        "TenantServiceState", back_populates="tenant", cascade="all, delete-orphan"
+    )
+    registration_groups: Mapped[list["TenantRegistrationGroup"]] = relationship(
+        "TenantRegistrationGroup", back_populates="tenant", cascade="all, delete-orphan"
+    )
+    documents: Mapped[list["TenantDocument"]] = relationship(
+        "TenantDocument", back_populates="tenant", cascade="all, delete-orphan"
+    )
+    branches: Mapped[list["Branch"]] = relationship(
+        "Branch", back_populates="tenant", cascade="all, delete-orphan"
+    )
+    programs: Mapped[list["Program"]] = relationship(
+        "Program", back_populates="tenant", cascade="all, delete-orphan"
+    )
+    roles: Mapped[list["Role"]] = relationship(
+        "Role", back_populates="tenant", cascade="all, delete-orphan"
+    )
+    users: Mapped[list["AppUser"]] = relationship(
+        "AppUser", back_populates="tenant", cascade="all, delete-orphan"
+    )
+    config: Mapped[Optional["TenantConfig"]] = relationship(
+        "TenantConfig", back_populates="tenant", uselist=False, cascade="all, delete-orphan"
+    )
+
+
+class TenantSubscription(Base):
+    """Tenant subscription linkage to SubscriptionPlan and billing cycle history."""
+    __tablename__ = "tenant_subscription"
+    __table_args__ = {"schema": "tenant"}
+
+    subscription_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenant.tenant.tenant_id"), nullable=False
+    )
+    plan_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenant.subscription_plan.plan_id"), nullable=False
+    )
+    billing_cycle: Mapped[str] = mapped_column(String(10), default="Monthly", nullable=False)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="Active", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.sysdatetimeoffset(), nullable=False
+    )
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), onupdate=func.sysdatetimeoffset(), nullable=True
+    )
+
+    # Relationships
+    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="subscriptions")
+    plan: Mapped["SubscriptionPlan"] = relationship("SubscriptionPlan", back_populates="subscriptions")
+
+
+class TenantContact(Base):
+    """Primary, billing, and operational contact persons for the tenant."""
+    __tablename__ = "tenant_contact"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "contact_type", name="UQ_tenant_contact_tenant_type"),
+        {"schema": "tenant"},
+    )
+
+    contact_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenant.tenant.tenant_id"), nullable=False
+    )
+    contact_type: Mapped[str] = mapped_column(String(50), nullable=False)  # Primary / Billing / Support
+    first_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    last_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    position_title: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    mobile: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.sysdatetimeoffset(), nullable=False
+    )
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), onupdate=func.sysdatetimeoffset(), nullable=True
+    )
+
+    # Relationships
+    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="contacts")
+
+
+class TenantAddress(Base):
+    """Registered, mailing, and physical business addresses of the tenant."""
+    __tablename__ = "tenant_address"
+    __table_args__ = {"schema": "tenant"}
+
+    address_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenant.tenant.tenant_id"), nullable=False
+    )
+    address_type: Mapped[str] = mapped_column(String(50), nullable=False)  # Registered / Mailing / Physical
+    address_line1: Mapped[str] = mapped_column(String(255), nullable=False)
+    address_line2: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    suburb: Mapped[str] = mapped_column(String(100), nullable=False)
+    state_code: Mapped[str] = mapped_column(String(10), nullable=False)
+    postcode: Mapped[str] = mapped_column(String(10), nullable=False)
+    country_code: Mapped[str] = mapped_column(String(3), default="AUS", nullable=False)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.sysdatetimeoffset(), nullable=False
+    )
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), onupdate=func.sysdatetimeoffset(), nullable=True
+    )
+
+    # Relationships
+    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="addresses")
+
+
+class TenantServiceState(Base):
+    """Operational states and territories where the tenant delivers NDIS services."""
+    __tablename__ = "tenant_service_state"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "state_code", name="UQ_tenant_service_state_tenant_state"),
+        {"schema": "tenant"},
+    )
+
+    service_state_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenant.tenant.tenant_id"), nullable=False
+    )
+    state_code: Mapped[str] = mapped_column(String(10), nullable=False)  # NSW/VIC/QLD/WA/SA/TAS/ACT/NT
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.sysdatetimeoffset(), nullable=False
+    )
+
+    # Relationships
+    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="service_states")
+
+
+class TenantRegistrationGroup(Base):
+    """NDIS Registration Groups approved for the tenant (Registered providers)."""
+    __tablename__ = "tenant_registration_group"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "registration_group_code", name="UQ_tenant_reg_group_code"),
+        {"schema": "tenant"},
+    )
+
+    tenant_reg_group_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenant.tenant.tenant_id"), nullable=False
+    )
+    registration_group_code: Mapped[str] = mapped_column(String(20), nullable=False)
+    registration_group_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.sysdatetimeoffset(), nullable=False
+    )
+
+    # Relationships
+    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="registration_groups")
+
+
+class TenantDocument(Base):
+    """Organisation-level files, registration certificates, and compliance policies."""
+    __tablename__ = "tenant_document"
+    __table_args__ = {"schema": "tenant"}
+
+    document_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenant.tenant.tenant_id"), nullable=False
+    )
+    document_category: Mapped[str] = mapped_column(String(100), nullable=False)
+    document_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_path: Mapped[str] = mapped_column(String(1000), nullable=False)
+    file_size_kb: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    mime_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    expiry_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    uploaded_by: Mapped[int] = mapped_column(Integer, nullable=False)
+    uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.sysdatetimeoffset(), nullable=False
+    )
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Relationships
+    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="documents")
+
+
+class Branch(Base):
+    """Physical branch offices and service hubs belonging to a tenant."""
+    __tablename__ = "branch"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "branch_code", name="UQ_branch_tenant_branch_code"),
+        {"schema": "tenant"},
+    )
+
+    branch_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenant.tenant.tenant_id"), nullable=False
+    )
+    branch_code: Mapped[str] = mapped_column(String(50), nullable=False)
+    branch_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    address_line1: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    suburb: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    state_code: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    postcode: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    is_head_office: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.sysdatetimeoffset(), nullable=False
+    )
+    updated_by: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), onupdate=func.sysdatetimeoffset(), nullable=True
+    )
+
+    # Relationships
+    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="branches")
+    users: Mapped[list["AppUser"]] = relationship("AppUser", back_populates="branch")
+    program_branches: Mapped[list["ProgramBranch"]] = relationship(
+        "ProgramBranch", back_populates="branch", cascade="all, delete-orphan"
+    )
+    cross_branch_accesses: Mapped[list["CrossBranchAccess"]] = relationship(
+        "CrossBranchAccess", back_populates="branch"
+    )
+
+
+class Program(Base):
+    """Service lines and programs (e.g. In-Home Support, SIL, Therapy) offered by the tenant."""
+    __tablename__ = "program"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "program_code", name="UQ_program_tenant_program_code"),
+        {"schema": "tenant"},
+    )
+
+    program_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenant.tenant.tenant_id"), nullable=False
+    )
+    program_code: Mapped[str] = mapped_column(String(50), nullable=False)
+    program_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    funding_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # NDIS / HCP / CHSP / DVA
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.sysdatetimeoffset(), nullable=False
+    )
+    updated_by: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), onupdate=func.sysdatetimeoffset(), nullable=True
+    )
+
+    # Relationships
+    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="programs")
+    program_branches: Mapped[list["ProgramBranch"]] = relationship(
+        "ProgramBranch", back_populates="program", cascade="all, delete-orphan"
+    )
+
+
+class ProgramBranch(Base):
+    """Branch mapping linking which programs are active at specific branches."""
+    __tablename__ = "program_branch"
+    __table_args__ = (
+        UniqueConstraint("program_id", "branch_id", name="UQ_program_branch_program_branch"),
+        {"schema": "tenant"},
+    )
+
+    program_branch_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    program_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenant.program.program_id"), nullable=False
+    )
+    branch_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenant.branch.branch_id"), nullable=False
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.sysdatetimeoffset(), nullable=False
+    )
+
+    # Relationships
+    program: Mapped["Program"] = relationship("Program", back_populates="program_branches")
+    branch: Mapped["Branch"] = relationship("Branch", back_populates="program_branches")
+
+
+class Role(Base):
+    """RBAC Role definitions for users. NULL tenant_id indicates a platform system role."""
+    __tablename__ = "role"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "role_code", name="UQ_role_tenant_role_code"),
+        {"schema": "tenant"},
+    )
+
+    role_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("tenant.tenant.tenant_id"), nullable=True
+    )
+    role_code: Mapped[str] = mapped_column(String(50), nullable=False)
+    role_name: Mapped[str] = mapped_column(String(150), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_system_role: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.sysdatetimeoffset(), nullable=False
+    )
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), onupdate=func.sysdatetimeoffset(), nullable=True
+    )
+
+    # Relationships
+    tenant: Mapped[Optional["Tenant"]] = relationship("Tenant", back_populates="roles")
+    role_permissions: Mapped[list["RolePermission"]] = relationship(
+        "RolePermission", back_populates="role", cascade="all, delete-orphan"
+    )
+    user_roles: Mapped[list["UserRole"]] = relationship("UserRole", back_populates="role")
+
+
+class Permission(Base):
+    """Granular system actions across modules (Tenant, Participant, Staff, Billing, Reports)."""
+    __tablename__ = "permission"
+    __table_args__ = {"schema": "tenant"}
+
+    permission_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    module: Mapped[str] = mapped_column(String(100), nullable=False)
+    action: Mapped[str] = mapped_column(String(100), nullable=False)
+    feature: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    permission_code: Mapped[str] = mapped_column(String(150), nullable=False, unique=True)
+    description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.sysdatetimeoffset(), nullable=False
+    )
+
+    # Relationships
+    role_permissions: Mapped[list["RolePermission"]] = relationship(
+        "RolePermission", back_populates="permission"
+    )
+
+
+class RolePermission(Base):
+    """Mapping of permissions granted to a role."""
+    __tablename__ = "role_permission"
+    __table_args__ = (
+        UniqueConstraint("role_id", "permission_id", name="UQ_role_permission_role_perm"),
+        {"schema": "tenant"},
+    )
+
+    role_permission_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    role_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenant.role.role_id"), nullable=False
+    )
+    permission_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenant.permission.permission_id"), nullable=False
+    )
+    granted: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    granted_by: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    granted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.sysdatetimeoffset(), nullable=False
+    )
+
+    # Relationships
+    role: Mapped["Role"] = relationship("Role", back_populates="role_permissions")
+    permission: Mapped["Permission"] = relationship("Permission", back_populates="role_permissions")
+
+
+class AppUser(Base):
+    """System users with identity credentials, tied to tenant and home branch.
+    Primary key user_id is NVARCHAR(50) UUID string.
+    """
+    __tablename__ = "app_user"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "email", name="UQ_app_user_tenant_email"),
+        {"schema": "tenant"},
+    )
+
+    user_id: Mapped[str] = mapped_column(String(50), primary_key=True)  # UUID string
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenant.tenant.tenant_id"), nullable=False
+    )
+    branch_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenant.branch.branch_id"), nullable=False
+    )
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(500), nullable=False)
+    first_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    last_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    mobile: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    job_title: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
+    is_tenant_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    password_changed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.sysdatetimeoffset(), nullable=False
+    )
+    updated_by: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), onupdate=func.sysdatetimeoffset(), nullable=True
+    )
+
+    # Relationships
+    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="users")
+    branch: Mapped["Branch"] = relationship("Branch", back_populates="users")
+    user_roles: Mapped[list["UserRole"]] = relationship(
+        "UserRole", back_populates="user", cascade="all, delete-orphan"
+    )
+    cross_branch_accesses: Mapped[list["CrossBranchAccess"]] = relationship(
+        "CrossBranchAccess", back_populates="user", cascade="all, delete-orphan"
+    )
+
+
+class UserRole(Base):
+    """Mapping table for roles assigned to users."""
+    __tablename__ = "user_role"
+    __table_args__ = (
+        UniqueConstraint("user_id", "role_id", name="UQ_user_role_user_role"),
+        {"schema": "tenant"},
+    )
+
+    user_role_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(
+        String(50), ForeignKey("tenant.app_user.user_id"), nullable=False
+    )
+    role_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenant.role.role_id"), nullable=False
+    )
+    assigned_by: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    assigned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.sysdatetimeoffset(), nullable=False
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # Relationships
+    user: Mapped["AppUser"] = relationship("AppUser", back_populates="user_roles")
+    role: Mapped["Role"] = relationship("Role", back_populates="user_roles")
+
+
+class CrossBranchAccess(Base):
+    """Permission delegation for a user to access participants/data in a secondary branch."""
+    __tablename__ = "cross_branch_access"
+    __table_args__ = (
+        UniqueConstraint("user_id", "branch_id", name="UQ_cross_branch_access_user_branch"),
+        {"schema": "tenant"},
+    )
+
+    access_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(
+        String(50), ForeignKey("tenant.app_user.user_id"), nullable=False
+    )
+    branch_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenant.branch.branch_id"), nullable=False
+    )
+    granted_by: Mapped[str] = mapped_column(String(50), nullable=False)
+    granted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.sysdatetimeoffset(), nullable=False
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # Relationships
+    user: Mapped["AppUser"] = relationship("AppUser", back_populates="cross_branch_accesses")
+    branch: Mapped["Branch"] = relationship("Branch", back_populates="cross_branch_accesses")
+
+
+class TenantConfig(Base):
+    """Tenant-specific regional, accounting, and NDIS system configurations."""
+    __tablename__ = "tenant_config"
+    __table_args__ = {"schema": "tenant"}
+
+    config_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenant.tenant.tenant_id"), unique=True, nullable=False
+    )
+    date_format: Mapped[str] = mapped_column(String(20), default="DD/MM/YYYY", nullable=False)
+    currency_code: Mapped[str] = mapped_column(String(3), default="AUD", nullable=False)
+    enable_gst: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    enable_schads_award: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    enable_pace_integration: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    enable_proda_integration: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    default_funding_type: Mapped[str] = mapped_column(
+        String(50), default="Agency Managed", nullable=False
+    )
+    invoice_prefix: Mapped[str] = mapped_column(String(20), default="INV", nullable=False)
+    invoice_due_days: Mapped[int] = mapped_column(Integer, default=14, nullable=False)
+    updated_by: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), onupdate=func.sysdatetimeoffset(), nullable=True
+    )
+
+    # Relationships
+    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="config")
+
+
+class AuditLog(Base):
+    """Immutable audit trail of state changes and administrative operations."""
+    __tablename__ = "audit_log"
+    __table_args__ = {"schema": "tenant"}
+
+    audit_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    user_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    action: Mapped[str] = mapped_column(String(50), nullable=False)
+    table_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    record_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    old_values: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    new_values: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    ip_address: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    user_agent: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.sysdatetimeoffset(), nullable=False
+    )

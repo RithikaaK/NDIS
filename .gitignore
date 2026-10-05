@@ -1,0 +1,56 @@
+# Python
+**/__pycache__/
+*.py[cod]
+*.pyd
+*.so
+
+# Python virtual environments
+**/venv/
+**/.venv/
+**/env/
+**/ENV/
+
+# Python environment/secrets
+**/.env
+**/.env.*
+!.env.example
+
+# Python cache/testing
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node
+**/node_modules/
+
+# React/Vite build files
+**/dist/
+**/dist2/
+**/.vite/
+**/coverage/
+
+# Logs
+*.log
+logs/
+temp/
+tmp/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# TypeScript
+*.tsbuildinfo
+
+# Local files
+*.local
+
+
+# Google OAuth credentials
+**/gmail_credentials.json
